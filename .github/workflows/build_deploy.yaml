@@ -1,0 +1,83 @@
+name: Build Container
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: "eu-west-1" # Select this to suit where you'd like to deploy your workload
+  REPO: ${{github.event.repository.name}}
+  ECR_REPOSITORY_ENVOY: my-envoy-proxy
+  ECR_REPOSITORY_APP: my-app
+  OIDC_ROLE: arn:aws:iam::192114778981:role/AllowEcrFromGithubActions
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read # This is required for actions/checkout
+jobs:
+  BuildPipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repo
+        uses: actions/checkout@v3
+
+      - name: Configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{env.OIDC_ROLE}}
+          aws-region: ${{env.AWS_REGION}}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+        with:
+          mask-password: "true"
+
+      - name: build and push ENVOY image to Amazon ECR
+        working-directory: ./envoy
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{env.ECR_REPOSITORY_ENVOY}}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          chmod +x parameters.sh
+          source parameters.sh
+
+          envsubst < envoy_template.yaml > envoy.yaml
+
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest 
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Build, tag, and push APP image to Amazon ECR
+        working-directory: ./app
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{env.ECR_REPOSITORY_APP}}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest 
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      - name: Build and deploy CFN
+        working-directory: ./infra
+        env:
+          ENVIRONMENT: prod
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY_APP: ${{env.ECR_REPOSITORY_APP}}
+          ECR_REPOSITORY_ENVOY: ${{env.ECR_REPOSITORY_ENVOY}}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          sam build --use-container
+          sam deploy --stack-name ${{env.REPO}} \
+            --parameter-overrides \
+              APPIMAGE=${{env.ECR_REGISTRY}}/${{env.ECR_REPOSITORY_APP}}:${{env.IMAGE_TAG}} \
+              ENVOYIMAGE=${{env.ECR_REGISTRY}}/${{env.ECR_REPOSITORY_ENVOY}}:${{env.IMAGE_TAG}} \
+              ENVIRONMENT=${{env.ENVIRONMENT}} \
+              SERVICENAME=${{env.REPO}} \
+            --resolve-s3 \
+            --region ${{env.AWS_REGION}} \
+            --no-fail-on-empty-changeset \
+            --no-confirm-changeset \
+            --tags project=${{env.REPO}} environment=${{env.ENVIRONMENT}}
