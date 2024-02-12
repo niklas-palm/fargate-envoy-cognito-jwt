@@ -1,6 +1,6 @@
 # ECS Fargate with Envoy sidecar for JWT + Cognito
 
-ECS service with Fargate with an Envoy proxy running as a sidecar that validates incoming requests using the JWT Authorizer HTTP filter with Cognito as JWT Issuer.
+Sample ECS service with Fargate with an Envoy proxy running as a sidecar that validates incoming requests using the JWT Authorizer HTTP filter with Cognito as JWT Issuer.
 
 ## Prerequisites
 
@@ -11,11 +11,16 @@ ECS service with Fargate with an Envoy proxy running as a sidecar that validates
 
 ## Overview
 
-- infra
+- `/infra`
   The AWS infrastructure --> network, ECS service, task definition etc.
 
-- app
-  The application container
+- `/app`
+  The sample application container
 
-- envoy
-  The Envoy sidecar container
+- `/envoy`
+  The sample Envoy sidecar container authenticating tokens against Cognito.
+
+## Considerations
+
+- Image build separation
+  Currently there's a new Envoy and App image created and registered with ECR with every new commit. Optimally, the build of the images would be separate.
