@@ -148,7 +148,7 @@ Resources:
       HealthCheckIntervalSeconds: 10 # Perform healthcheck every x
       HealthCheckPath: /healthcheck # A health check is a ping to this path
       HealthCheckProtocol: HTTP # Which protocol to use for the healthcheck
-      HealthCheckTimeoutSeconds: 4 # If no response within x, the healthcheck fails
+      HealthCheckTimeoutSeconds: 2 # If no response within x, the healthcheck fails
       HealthyThresholdCount: 2 # After x successfull healthchecks, the target is considered healthy
       Matcher:
         HttpCode: "200-299" # Defines what is considered healthy response
@@ -230,7 +230,7 @@ Resources:
         Type: ECS
       DesiredCount: 2
       EnableECSManagedTags: false # The new ARN and resource ID format must be enabled to work with ECS managed tags.
-      HealthCheckGracePeriodSeconds: 25 # Give the container x seconds after start-up before helth-check from ALB starts coming in.
+      HealthCheckGracePeriodSeconds: 10 # Give the container x seconds after start-up before helth-check from ALB starts coming in.
       LaunchType: FARGATE
       LoadBalancers:
         - TargetGroupArn: !Ref TargetGroup
